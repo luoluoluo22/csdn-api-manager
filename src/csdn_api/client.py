@@ -10,6 +10,7 @@ from typing import Dict, Optional, List
 from loguru import logger
 from pyppeteer import launch
 from src.csdn_api.exceptions import CSDNAuthError, CSDNAPIError
+from src.csdn_api.config import get_chrome_path
 
 class CSDNClient:
     """CSDN API 客户端类"""
@@ -18,10 +19,10 @@ class CSDNClient:
         """初始化CSDN API客户端
         
         Args:
-            chrome_path (str, optional): Chrome浏览器路径
+            chrome_path (str, optional): Chrome浏览器路径，如果不指定则从环境变量或配置文件获取
             cookies_file (str, optional): cookies文件路径
         """
-        self.chrome_path = chrome_path
+        self.chrome_path = chrome_path or get_chrome_path()
         self.cookies_file = Path(cookies_file) if cookies_file else Path("cookies.json")
         self.browser = None
         self.page = None
@@ -199,3 +200,90 @@ class CSDNClient:
         except Exception as e:
             logger.error(f"检查登录状态失败: {str(e)}")
             return False 
+
+    async def get_article_list(self, page: int = 1, size: int = 20, status: str = "all") -> Dict:
+        """获取文章列表
+        
+        Args:
+            page: 页码，从1开始
+            size: 每页数量
+            status: 文章状态，可选值：all（全部）、published（已发布）、draft（草稿）
+            
+        Returns:
+            Dict: 文章列表响应
+            
+        Raises:
+            CSDNAuthError: 认证失败时抛出
+            CSDNAPIError: API调用失败时抛出
+        """
+        await self.init()
+        
+        try:
+            logger.info(f"正在获取文章列表... 第{page}页，每页{size}条，状态：{status}")
+            
+            # 先获取用户信息
+            user_info = await self.get_user_info()
+            if not user_info or 'data' not in user_info or 'basic' not in user_info['data']:
+                raise CSDNAPIError("无法获取用户信息")
+            
+            user_id = user_info['data']['basic']['id']
+            
+            # 先访问博客主页
+            blog_url = f'https://blog.csdn.net/{user_id}'
+            logger.info(f"访问博客主页: {blog_url}")
+            await self.page.goto(blog_url)
+            await asyncio.sleep(2)  # 等待页面加载
+            
+            # 创建一个Future对象来存储响应
+            response_future = asyncio.Future()
+            
+            def handle_response(response):
+                asyncio.ensure_future(process_response(response))
+                
+            async def process_response(response):
+                if 'get-business-list' in response.url:
+                    try:
+                        json_data = await response.json()
+                        if not response_future.done():
+                            response_future.set_result(json_data)
+                    except Exception as e:
+                        logger.error(f"解析响应失败: {str(e)}")
+                        try:
+                            text = await response.text()
+                            logger.error(f"响应内容: {text}")
+                        except:
+                            pass
+                        if not response_future.done():
+                            response_future.set_exception(e)
+            
+            # 监听响应
+            self.page.on('response', handle_response)
+            
+            # 使用evaluate执行API请求
+            logger.info("执行API请求...")
+            await self.page.evaluate(f'''async () => {{
+                const response = await fetch('https://blog.csdn.net/community/home-api/v1/get-business-list?page={page}&size={size}&businessType=blog&orderby=&noMore=false&year=&month=&username={user_id}', {{
+                    method: 'GET',
+                    headers: {{
+                        'accept': 'application/json, text/plain, */*',
+                        'referer': '{blog_url}',
+                        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                    }},
+                    credentials: 'include'
+                }});
+                return response.json();
+            }}''')
+            
+            # 等待响应数据或超时
+            try:
+                response_data = await asyncio.wait_for(response_future, timeout=10.0)
+                logger.info(f"获取文章列表成功: {response_data}")
+                return response_data
+            except asyncio.TimeoutError:
+                raise CSDNAPIError("获取文章列表超时")
+            
+        except Exception as e:
+            if isinstance(e, CSDNAuthError):
+                raise
+            logger.error(f"获取文章列表失败: {str(e)}")
+            raise CSDNAPIError(f"API调用失败: {str(e)}") 

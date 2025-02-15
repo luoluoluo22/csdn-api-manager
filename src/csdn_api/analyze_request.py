@@ -18,7 +18,8 @@ class RequestAnalyzer:
             'bizapi.csdn.net/user-api/user/getUserInfoByToken',
             'bizapi.csdn.net/community-personal/v1/get-personal-info',
             'bizapi.csdn.net/user-api/user/profile/info',
-            'msg.csdn.net/v1/web/message/view/unread'
+            'msg.csdn.net/v1/web/message/view/unread',
+            'bizapi.csdn.net/blog-console-api/v3/article/list'  # 添加文章列表API
         ]
         
     async def intercept_request(self, request):
@@ -145,9 +146,9 @@ class RequestAnalyzer:
             await page.goto('https://i.csdn.net/#/user-center/profile')
             await asyncio.sleep(3)
             
-            # 访问消息中心
-            logger.info("\n正在访问消息中心...")
-            await page.goto('https://i.csdn.net/#/msg/index')
+            # 访问文章管理页面
+            logger.info("\n正在访问文章管理页面...")
+            await page.goto('https://mp.csdn.net/mp_blog/manage/article')
             await asyncio.sleep(3)
             
             # 等待用户手动操作
