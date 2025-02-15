@@ -8,6 +8,7 @@
 - 支持获取用户基本信息
 - 支持获取未读消息数量
 - 支持获取文章列表
+- 支持搜索CSDN内容
 - 自动处理登录状态和Cookie管理
 
 ## 安装要求
@@ -177,6 +178,58 @@ if __name__ == "__main__":
         'currentPage': 当前页码
     }
 }
+```
+
+##### search(keyword: str, page: int = 1, scope: str = None, username: str = None)
+搜索CSDN内容。
+
+参数：
+- `keyword`: 搜索关键词
+- `page`: 页码，从1开始
+- `scope`: 搜索范围，可选值：blog（博客）、download（下载）等
+- `username`: 指定用户名，只搜索该用户的内容
+
+返回示例：
+```python
+{
+    'code': 200,
+    'message': 'success',
+    'data': {
+        'list': [
+            {
+                'title': '文章标题',
+                'url': '文章链接',
+                'description': '文章描述',
+                'author': '作者名',
+                'publishTime': '发布时间',
+                'viewCount': '阅读数',
+                'type': '内容类型'
+            }
+        ],
+        'pagination': {
+            'currentPage': 1,
+            'totalPages': 100
+        },
+        'keyword': '搜索关键词',
+        'page': 1
+    }
+}
+```
+
+使用示例：
+```python
+# 搜索Python相关内容
+results = await client.search(
+    keyword="Python爬虫",
+    page=1,
+    scope="blog"  # 只搜索博客
+)
+
+# 搜索特定用户的内容
+results = await client.search(
+    keyword="Python",
+    username="weixin_43090804"
+)
 ```
 
 ## 注意事项
